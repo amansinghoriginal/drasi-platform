@@ -2,6 +2,8 @@ package io.drasi;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import io.drasi.source.sdk.SourceProxy;
 import io.drasi.source.sdk.models.SourceElement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,12 +28,17 @@ class TableCursor {
 
     private void Init(Connection connection) throws SQLException {
         if (resultSet == null) {
+            log.info("[AMAN] Initializing TableCursor for table: {}", tableName);
             mapping = ReadMappingFromSchema(tableName, connection);
             var statement = connection.createStatement();
-            var sanitizedTableName = tableName.replace("\"", "").replace(";", "");
-            resultSet = statement.executeQuery("SELECT * FROM \"" + sanitizedTableName + "\"");
+
+            String quote = SourceProxy.GetConfigValue("connector").equalsIgnoreCase("MySQL") ? "`" : "\"";
+            var sanitizedTableName = tableName.replace(quote, "").replace(";", "");
+            resultSet = statement.executeQuery("SELECT * FROM " + quote + sanitizedTableName + quote);
             metaData = resultSet.getMetaData();
             columnCount = metaData.getColumnCount();
+            log.info("[AMAN] TableCursor initialized for table: {}", tableName);
+            log.info("[AMAN] Column count: {}", columnCount);
         }
     }
 
@@ -65,6 +72,7 @@ class TableCursor {
     }
 
     public void close() {
+        log.info("[AMAN] Closing TableCursor for table: {}", tableName);
         try {
             if (resultSet != null) {
                 resultSet.close();

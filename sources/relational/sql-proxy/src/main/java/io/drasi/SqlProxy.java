@@ -26,7 +26,7 @@ public class SqlProxy {
 
     public static void main(String[] args) {
 
-        log.info("Starting SQL Proxy for {}", SourceProxy.SourceId());
+        log.info("[AMAN] Starting SQL Proxy for {}", SourceProxy.SourceId());
 
         var proxy = SourceProxy.builder()
                 .withStreamFunction(ResultStream::new)

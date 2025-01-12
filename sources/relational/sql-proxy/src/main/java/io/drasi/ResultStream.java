@@ -18,6 +18,7 @@ public class ResultStream implements BootstrapStream {
     private final Queue<TableCursor> cursors;
 
     public ResultStream(BootstrapRequest request) {
+        log.info("[AMAN] ResultStream::ctor starting.");
         try {
             this.connection = getConnection();
         } catch (SQLException e) {
@@ -29,11 +30,14 @@ public class ResultStream implements BootstrapStream {
         for (var table : request.getNodeLabels()) {
             cursors.add(new TableCursor(table));
         }
+        log.info("[AMAN] ResultStream::ctor finished.");
     }
 
     public SourceElement next() {
+        log.info("[AMAN] ResultStream::next starting.");
         var cursor = cursors.peek();
         if (cursor == null) {
+            log.info("[AMAN] No more elements to return 1.");
             return null;
         }
         var next = cursor.next(connection);
@@ -41,11 +45,13 @@ public class ResultStream implements BootstrapStream {
             cursors.poll().close();
             cursor = cursors.peek();
             if (cursor == null) {
+                log.info("[AMAN] No more elements to return 2.");
                 return null;
             }
             next = cursor.next(connection);
         }
-
+        
+        log.info("[AMAN] Returning element with id: {}", next.toJson());
         return next;
     }
 
@@ -60,6 +66,8 @@ public class ResultStream implements BootstrapStream {
     }
 
     private static Connection getConnection() throws SQLException {
+        log.info("[AMAN] ResultStream::getConnection starting.");
+        log.info("[AMAN] Getting Config for connector = {}", SourceProxy.GetConfigValue("connector"));
         switch (SourceProxy.GetConfigValue("connector")) {
             case "PostgreSQL":
                 var propsPG = new Properties();
@@ -68,6 +76,20 @@ public class ResultStream implements BootstrapStream {
                 propsPG.setProperty("sslmode", SourceProxy.GetConfigValue("sslMode", "prefer"));
 
                 return DriverManager.getConnection("jdbc:postgresql://" + SourceProxy.GetConfigValue("host") + ":" + SourceProxy.GetConfigValue("port") + "/" + SourceProxy.GetConfigValue("database"), propsPG);
+            case "MySQL":
+                var propsMySql = new Properties();
+                propsMySql.setProperty("user", SourceProxy.GetConfigValue("user"));
+                propsMySql.setProperty("password", SourceProxy.GetConfigValue("password"));
+                propsMySql.setProperty("sslmode", SourceProxy.GetConfigValue("sslMode", "prefer"));
+
+                log.info("[AMAN] Setting property of user = {}", propsMySql.getProperty("user"));
+                log.info("[AMAN] Setting property of password = {}", propsMySql.getProperty("password"));
+                log.info("[AMAN] Setting property of sslmode = {}", propsMySql.getProperty("sslmode"));
+
+                var jdbcConnectionString = "jdbc:mysql://" + SourceProxy.GetConfigValue("host") + ":" + SourceProxy.GetConfigValue("port") + "/" + SourceProxy.GetConfigValue("database");
+                log.info("[AMAN] Opening connection with jdbcConnectionString = {}", jdbcConnectionString);
+
+                return DriverManager.getConnection(jdbcConnectionString, propsMySql);
             case "SQLServer":
                 var propsSQL = new Properties();
                 propsSQL.setProperty("user", SourceProxy.GetConfigValue("user"));

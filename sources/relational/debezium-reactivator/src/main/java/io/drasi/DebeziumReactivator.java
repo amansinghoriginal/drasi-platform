@@ -35,6 +35,7 @@ public class DebeziumReactivator {
         ChangeMonitor monitor = switch (Reactivator.GetConfigValue("connector")) {
             case "PostgreSQL" -> new PostgresChangeMonitor();
             case "SQLServer" -> new SqlServerChangeMonitor();
+            case "MySQL" -> new MySqlChangeMonitor();
             default -> throw new IllegalArgumentException("Unknown connector");
         };
 
