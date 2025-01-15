@@ -1,5 +1,6 @@
 package io.drasi;
 
+import io.drasi.models.RelationalGraphMapping;
 import io.debezium.config.Configuration;
 import io.debezium.engine.ChangeEvent;
 import io.debezium.engine.DebeziumEngine;
@@ -9,30 +10,20 @@ import io.drasi.source.sdk.ChangeMonitor;
 import io.drasi.source.sdk.ChangePublisher;
 import io.drasi.source.sdk.Reactivator;
 import io.drasi.source.sdk.StateStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Properties;
 
 public class MySqlChangeMonitor implements ChangeMonitor {
-    private static final Logger log = LoggerFactory.getLogger(MySqlChangeMonitor.class);
     private DebeziumEngine<ChangeEvent<String, String>> engine;
 
     public MySqlChangeMonitor() {
-        log.info("[AMAN] MySqlChangeMonitor instance created.");
     }
 
     @Override
     public void run(ChangePublisher changePublisher, StateStore stateStore) throws Exception {
-        log.info("[AMAN] MySqlChangeMonitor run method invoked.");
-
         var sourceId = Reactivator.SourceId();
         var tableListStr = Reactivator.GetConfigValue("tables");
         var tableList = tableListStr.split(",");
-
-        for (String string : tableList) {
-            log.info("[AMAN] table entry in tableList = {}", string);
-        }
 
         Configuration config = Configuration.create()
                 .with("connector.class", "io.debezium.connector.mysql.MySqlConnector")
@@ -57,44 +48,27 @@ public class MySqlChangeMonitor implements ChangeMonitor {
                 .with("temporalConverter.type", "io.drasi.TemporalConverter")
                 .build();
 
+        var sr = new SchemaReader(config);
+        var mappings = new RelationalGraphMapping();
+        mappings.nodes = sr.ReadMappingsFromSchema(tableList);
+
         final Properties props = config.asProperties();
-        log.info("[AMAN] Configuration properties:");
-        for (var entry : props.entrySet()) {
-            log.info("\t....[AMAN] Property: {} = {}", entry.getKey(), entry.getValue());
-        }
 
         engine = DebeziumEngine.create(Json.class)
                 .using(props)
                 .using(OffsetCommitPolicy.always())
-                .notifying(record -> {
-                    if (record.value() != null) {
-                        log.info("[AMAN] Change detected: Key = {}, Value = {}", record.key(), record.value());
-                    } else {
-                        log.info("[AMAN] Heartbeat or schema change event received.");
-                    }
-                })
                 .using((success, message, error) -> {
                     if (!success && error != null) {
-                        log.error("[AMAN] Engine error: {}", error.getMessage(), error);
-                        // Log the full stack trace
-                        log.error("[AMAN] Full error: ", error);
-                    } else if (!success) {
-                        log.error("[AMAN] Engine failed without error: {}", message);
-                    } else if (success) {
-                        log.info("[AMAN] Engine completed successfully: {}", message);
+                        Reactivator.TerminalError(error);
                     }
                 })
+                .notifying(new MySqlChangeConsumer(mappings, changePublisher))
                 .build();
-
-        log.info("[AMAN] Starting Debezium engine for MySQL...");
+        
         engine.run();
     }
 
     public void close() throws Exception {
-        if (engine != null) {
-            log.info("[AMAN] Stopping Debezium engine for MySQL...");
-            engine.close();
-            log.info("[AMAN] Debezium engine stopped.");
-        }
+        engine.close();
     }
 }

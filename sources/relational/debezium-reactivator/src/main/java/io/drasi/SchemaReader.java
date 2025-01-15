@@ -18,6 +18,10 @@ package io.drasi;
 
 import io.drasi.models.NodeMapping;
 import io.debezium.config.Configuration;
+import io.debezium.connector.mysql.MySqlConnectorConfig;
+import io.debezium.connector.mysql.jdbc.MySqlConnection;
+import io.debezium.connector.mysql.jdbc.MySqlConnectionConfiguration;
+import io.debezium.connector.mysql.jdbc.MySqlFieldReaderResolver;
 import io.debezium.connector.postgresql.PostgresConnectorConfig;
 import io.debezium.connector.postgresql.connection.PostgresConnection;
 import io.debezium.connector.sqlserver.SqlServerConnection;
@@ -25,6 +29,7 @@ import io.debezium.connector.sqlserver.SqlServerConnectorConfig;
 import io.debezium.jdbc.JdbcConnection;
 import io.debezium.relational.RelationalDatabaseConnectorConfig;
 
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 
@@ -32,12 +37,13 @@ public class SchemaReader {
 
     public enum Connector {
         Postgres,
-        SqlServer
+        SqlServer,
+        MySql
     }
 
     private RelationalDatabaseConnectorConfig configuration;
+    Configuration config;
     private Connector connector;
-
 
     public SchemaReader(Configuration config) {
         switch (config.getString("connector.class")) {
@@ -49,17 +55,26 @@ public class SchemaReader {
                 configuration = new SqlServerConnectorConfig(config);
                 connector = Connector.SqlServer;
                 break;
+            case "io.debezium.connector.mysql.MySqlConnector":
+                configuration = new MySqlConnectorConfig(config);
+                this.config = config;
+                connector = Connector.MySql;
+                break;
             default:
                 throw new IllegalArgumentException("Unknown connector");
         }
     }
 
-    private JdbcConnection GetConnection() {
+    public JdbcConnection GetConnection() {
         switch (connector) {
             case Postgres:
                 return new PostgresConnection(configuration.getJdbcConfig(), "drasi");
             case SqlServer:
                 return new SqlServerConnection((SqlServerConnectorConfig) configuration, null, new HashSet<>(), true);
+            case MySql:
+                var connectionConfig = new MySqlConnectionConfiguration(this.config);
+                var connectorConfig = (MySqlConnectorConfig) configuration;
+                return new MySqlConnection(connectionConfig, MySqlFieldReaderResolver.resolve(connectorConfig));
             default:
                 throw new IllegalArgumentException("Unknown connector");
         }
@@ -79,11 +94,23 @@ public class SchemaReader {
                     tableName = tableComps[1];
                 }
 
-                var rs = metadata.getPrimaryKeys(null, schemaName, tableName);
+                ResultSet rs = null;
+                if (connector == Connector.MySql) {
+                    rs = metadata.getPrimaryKeys(schemaName, null, tableName);
+                } else {
+                    rs = metadata.getPrimaryKeys(null, schemaName, tableName);
+                }
+
                 if (!rs.next())
                     throw new SQLException("No primary key found for " + table);
                 var mapping = new NodeMapping();
-                mapping.tableName = rs.getString("TABLE_SCHEM") + "." + tableName;
+
+                if (connector == Connector.MySql) {
+                    mapping.tableName = rs.getString("TABLE_CAT") + "." + tableName;
+                } else {
+                    mapping.tableName = rs.getString("TABLE_SCHEM") + "." + tableName;
+                }
+                
                 mapping.keyField = rs.getString("COLUMN_NAME");
                 mapping.labels = Collections.singleton(tableName);
 

@@ -34,7 +34,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 abstract class RelationalChangeConsumer implements DebeziumEngine.ChangeConsumer<ChangeEvent<String, String>> {
+    private static final Logger log = LoggerFactory.getLogger(RelationalChangeConsumer.class);
 
     private ObjectMapper objectMapper = new ObjectMapper();
     private Map<String, NodeMapping> tableToNodeMap;
@@ -80,15 +84,18 @@ abstract class RelationalChangeConsumer implements DebeziumEngine.ChangeConsumer
 
     private SourceChange ExtractNodeChange(JsonNode sourceChange) {
         var pgPayload = sourceChange.path("payload");
-
         if (!pgPayload.has("op"))
             return null;
-
+        
         var pgSource = pgPayload.path("source");
-        var tableName = pgSource.path("schema").asText() + "." + pgSource.path("table").asText();
+        log.info("[AMAN] pgSource: " + pgSource.toString());
+        var tableName = pgSource.path("db").asText() + "." + pgSource.path("table").asText();
+        log.info("[AMAN] tableName: " + tableName);
 
-        if (!tableToNodeMap.containsKey(tableName))
+        if (!tableToNodeMap.containsKey(tableName)) {
+            log.info("[AMAN] Table name is not found in my map. Ignore this change...");
             return null;
+        }
 
         var mapping = tableToNodeMap.get(tableName);
 
@@ -103,18 +110,26 @@ abstract class RelationalChangeConsumer implements DebeziumEngine.ChangeConsumer
             default:
                 return null;
         }
-        var nodeId = SanitizeNodeId(mapping.tableName + ":" + item.path(mapping.keyField).asText());
+
         if (!item.has(mapping.keyField)) {
+            log.info("[AMAN] No key field found in item: " + item.toString());
             return null;
         }
+
+        var nodeId = SanitizeNodeId(mapping.tableName + ":" + item.path(mapping.keyField).asText());
+        log.info("[AMAN] Found & sanitized nodeId: " + nodeId);
         var tsMs = pgPayload.path("ts_ms").asLong();
+        log.info("[AMAN] Found tsMs: " + tsMs);
 
         switch (pgPayload.path("op").asText()) {
             case "c":
+                log.info("[AMAN] Creating new SourceInsert object.");
                 return new SourceInsert(nodeId, tsMs, item, null, mapping.labels.stream().toList(), tsMs, ExtractLsn(pgSource));
             case "u":
+                log.info("[AMAN] Creating new SourceUpdate object.");
                 return new SourceUpdate(nodeId, tsMs, item, null, mapping.labels.stream().toList(), tsMs, ExtractLsn(pgSource));
             case "d":
+                log.info("[AMAN] Creating new SourceDelete object.");
                 return new SourceDelete(nodeId, tsMs, null, mapping.labels.stream().toList(), tsMs, ExtractLsn(pgSource));
         }
 
