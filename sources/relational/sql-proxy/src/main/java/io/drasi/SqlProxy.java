@@ -17,23 +17,15 @@
 package io.drasi;
 
 import io.drasi.source.sdk.SourceProxy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class SqlProxy {
 
-    private static final Logger log = LoggerFactory.getLogger(SqlProxy.class);
-
     public static void main(String[] args) {
-
-        log.info("Starting SQL Proxy for {}", SourceProxy.SourceId());
-
         var proxy = SourceProxy.builder()
                 .withStreamFunction(ResultStream::new)
                 .withPort(4002)
                 .build();
 
         proxy.start();
-
     }
 }
