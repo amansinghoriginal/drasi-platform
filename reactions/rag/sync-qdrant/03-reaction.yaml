@@ -1,0 +1,7 @@
+kind: Reaction
+apiVersion: v1
+name: sync-qdrant2
+spec:
+  kind: SyncQdrant
+  queries:
+    freezer-query: "{}"

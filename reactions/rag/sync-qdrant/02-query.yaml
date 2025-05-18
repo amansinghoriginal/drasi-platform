@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ContinuousQuery
+name: freezer-query
+spec:
+  mode: query
+  sources:    
+    subscriptions:
+      - id: freezer-source
+        nodes:
+          - sourceLabel: freezer
+  query: >
+    MATCH
+        (f:freezer)
+    RETURN
+        f.id AS id,
+        f.temperature AS temperature
