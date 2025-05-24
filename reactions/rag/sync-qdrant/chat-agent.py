@@ -14,7 +14,7 @@ CHAT_COMPLETION_DEPLOYMENT_NAME = "gpt-4.1"
 # Qdrant Configuration
 QDRANT_HOST = "localhost"
 QDRANT_PORT = 6333
-QDRANT_COLLECTION_NAME = "drasi-poc-collection"
+QDRANT_COLLECTION_NAME = "freezer"
 
 # Initialize Azure OpenAI Client
 azure_client = AsyncAzureOpenAI(

@@ -1,7 +1,16 @@
 kind: Reaction
 apiVersion: v1
-name: sync-qdrant2
+name: sync-qdrant4
 spec:
   kind: SyncQdrant
+  properties:
+    qdrantHost: "qdrant-service.default.svc.cluster.local"
+    azureOpenAIEndpoint: "https://amand-man4uhdu-swedencentral.cognitiveservices.azure.com/"
+    azureOpenAIKey: "6WYvHiJAItIwDOOZ5r1HsB4ZiASQFLvWanE3xlsXiW4COtXQ3PCIJQQJ99BEACfhMk5XJ3w3AAAAACOGzqCo"
+    embeddingModelName: "text-embedding-3-large"
   queries:
-    freezer-query: "{}"
+    freezer-query: |
+      {
+        "qdrantCollectionName": "freezer",
+        "keyFieldName": "id"
+      }

@@ -5,3 +5,49 @@ spec:
   services:
     reaction:
       image: reaction-sync-qdrant
+  config_schema:
+    type: object
+    properties:
+      # Hostname of the Qdrant service.
+      qdrantHost:
+        type: string
+      # The port of the Qdrant service.
+      qdrantPort:
+        type: integer
+        default: 6334
+      # Whether to use HTTPS for the Qdrant service.
+      qdrantHttps:
+        type: boolean
+        default: false
+      # The Qdrant point ID used as key for storing sync metadata.
+      qdrantSyncMetadataPointId:
+        type: string
+        default: "00000000-0000-0000-0000-000000000000"
+      qdrantDistanceMetric:
+        type: string
+        enum:
+          - "Cosine"
+          - "Euclid"
+          - "Dot"
+          - "Manhattan"
+        default: "Cosine"
+      # The Azure OpenAI resource endpoint to use.
+      azureOpenAIEndpoint:
+        type: string
+        default: "https://<your-openai-endpoint>.openai.azure.com/"
+      # The API key to authenticate with the Azure OpenAI service endpoint.
+      azureOpenAIKey:
+        type: string
+        default: "<your-openai-key>"
+      # The deployment name of the Azure OpenAI model to use for embeddings.
+      embeddingModelName:
+        type: string
+      # The number of dimensions in the model's vector output.
+      modelVectorDimensions:
+        type: integer
+        default: 3072
+    required:
+      - qdrantHost
+      - azureOpenAIEndpoint
+      - azureOpenAIKey
+      - embeddingModelName

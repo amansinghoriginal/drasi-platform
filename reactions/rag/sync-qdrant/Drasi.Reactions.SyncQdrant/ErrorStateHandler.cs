@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-using System.Text.Json.Serialization;
-
 namespace Drasi.Reactions.SyncQdrant;
-
-public class QueryConfig
+public interface IErrorStateHandler
 {
-    // Qdrant collection name to sync with.
-    [JsonPropertyName("qdrantCollectionName")]
-    required public string QdrantCollectionName { get; set; }
+    void Terminate(string message);
+}
 
-    // Name of the field in Drasi Query Result used as the primary key.
-    [JsonPropertyName("keyFieldName")]
-    required public string KeyFieldName { get; set; }
+public class ErrorStateHandler : IErrorStateHandler
+{
+    public void Terminate(string message)
+    {
+        Reaction.SDK.Reaction<QueryConfig>.TerminateWithError(message);
+    }
 }
