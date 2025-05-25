@@ -1,0 +1,477 @@
+# Copyright 2024 The Drasi Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Update Dependabot Config
+
+on:
+  schedule:
+    # Daily at 12pm Pacific Time (19:00 UTC during PST, 20:00 UTC during PDT)
+    # Using 20:00 UTC to account for PDT (most of the year)
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+    inputs:
+      grouping_strategy:
+        description: 'Grouping strategy for dependency updates'
+        required: false
+        default: 'patch:minor'
+        type: choice
+        options:
+          - 'none'              # No grouping
+          - 'patch-minor-major' # 3 separate groups
+          - 'patch:minor-major' # patch+minor together, major separate
+          - 'patch:minor:major' # All together in one group
+          - 'patch'             # Only patch grouped
+          - 'patch:minor'       # patch+minor grouped (default)
+      pr_limit:
+        description: 'Maximum open PRs per ecosystem'
+        required: false
+        default: '5'
+        type: string
+      auto_commit:
+        description: 'Auto-commit changes (true) or create PR (false)'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  GROUPING_STRATEGY: ${{ github.event.inputs.grouping_strategy || 'patch:minor' }}
+  PR_LIMIT: ${{ github.event.inputs.pr_limit || '5' }}
+  AUTO_COMMIT: ${{ github.event.inputs.auto_commit || 'true' }}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-dependabot-config:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml
+
+      - name: Generate Dependabot configuration
+        id: generate-config
+        run: |
+          python3 << 'EOF'
+          import os
+          import sys
+          import yaml
+          import json
+          import subprocess
+          from pathlib import Path
+          from datetime import datetime
+          from collections import defaultdict
+          
+          # Configuration from environment
+          grouping_strategy = os.environ.get('GROUPING_STRATEGY', 'patch:minor')
+          pr_limit = int(os.environ.get('PR_LIMIT', '5'))
+          
+          print(f"Configuration:")
+          print(f"  Grouping strategy: {grouping_strategy}")
+          print(f"  PR limit: {pr_limit}")
+          print("")
+          
+          # Ecosystem configurations
+          ecosystems = {
+              'npm': ['package.json'],
+              'pip': ['requirements.txt', 'requirements.in', 'requirements-*.txt', 'setup.py', 
+                      'setup.cfg', 'pyproject.toml', 'Pipfile', 'Pipfile.lock'],
+              'gomod': ['go.mod'],
+              'cargo': ['Cargo.toml'],
+              'maven': ['pom.xml'],
+              'gradle': ['build.gradle', 'build.gradle.kts'],
+              'nuget': ['*.csproj', '*.fsproj', '*.vbproj', 'packages.config', 
+                        '*.props', 'Directory.Build.props', 'Directory.Build.targets'],
+              'docker': ['Dockerfile', 'Dockerfile.*', '*.dockerfile'],
+              'github-actions': ['.github/workflows/*.yml', '.github/workflows/*.yaml'],
+              'bundler': ['Gemfile', 'Gemfile.lock'],
+              'composer': ['composer.json', 'composer.lock'],
+              'hex': ['mix.exs', 'mix.lock'],
+              'terraform': ['*.tf', 'versions.tf', 'main.tf', 'terraform.tf'],
+              'elm': ['elm.json'],
+              'submodules': ['.gitmodules']
+          }
+          
+          # Day mapping for weekly schedules
+          ecosystem_days = {
+              'cargo': 'monday',
+              'nuget': 'tuesday',
+              'gomod': 'wednesday',
+              'maven': 'wednesday',
+              'pip': 'wednesday',
+              'docker': 'thursday',
+              'github-actions': 'thursday',
+              'npm': 'friday',
+              'bundler': 'sunday',
+              'gradle': 'sunday'
+          }
+          
+          def find_files(patterns):
+              """Find all files matching the given patterns."""
+              found_files = []
+              for pattern in patterns:
+                  if '*' in pattern:
+                      # Use find command for glob patterns
+                      cmd = f'find . -name "{pattern}" -type f 2>/dev/null || true'
+                      result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                      files = [f.strip() for f in result.stdout.strip().split('\n') if f.strip()]
+                      found_files.extend(files)
+                  else:
+                      # Use find for exact filenames
+                      cmd = f'find . -name "{pattern}" -type f 2>/dev/null || true'
+                      result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                      files = [f.strip() for f in result.stdout.strip().split('\n') if f.strip()]
+                      found_files.extend(files)
+              return found_files
+          
+          def get_directories(files, ecosystem):
+              """Get unique directories from file paths."""
+              directories = set()
+              for file in files:
+                  if ecosystem == 'github-actions':
+                      # GitHub Actions always uses root directory
+                      directories.add('/')
+                  else:
+                      # Get directory and normalize path
+                      dir_path = os.path.dirname(file)
+                      if dir_path == '.':
+                          directories.add('/')
+                      else:
+                          # Remove leading ./ and ensure it starts with /
+                          normalized = dir_path.lstrip('./')
+                          directories.add(f'/{normalized}' if not normalized.startswith('/') else normalized)
+              return sorted(list(directories))
+          
+          def parse_grouping_strategy(strategy):
+              """Parse grouping strategy into groups configuration."""
+              if strategy == 'none':
+                  return None
+              
+              groups = {}
+              
+              if strategy == 'patch-minor-major':
+                  # Three separate groups
+                  groups['patch'] = {
+                      'patterns': ['*'],
+                      'update-types': ['patch']
+                  }
+                  groups['minor'] = {
+                      'patterns': ['*'],
+                      'update-types': ['minor']
+                  }
+                  groups['major'] = {
+                      'patterns': ['*'],
+                      'update-types': ['major']
+                  }
+              elif strategy == 'patch:minor-major':
+                  # Patch and minor together, major separate
+                  groups['non-major'] = {
+                      'patterns': ['*'],
+                      'update-types': ['patch', 'minor']
+                  }
+                  groups['major'] = {
+                      'patterns': ['*'],
+                      'update-types': ['major']
+                  }
+              elif strategy == 'patch:minor:major':
+                  # All updates together
+                  groups['all-updates'] = {
+                      'patterns': ['*'],
+                      'update-types': ['patch', 'minor', 'major']
+                  }
+              elif strategy == 'patch':
+                  # Only patch updates grouped
+                  groups['patch'] = {
+                      'patterns': ['*'],
+                      'update-types': ['patch']
+                  }
+              elif strategy == 'patch:minor':
+                  # Patch and minor grouped (default)
+                  groups['non-major'] = {
+                      'patterns': ['*'],
+                      'update-types': ['patch', 'minor']
+                  }
+              
+              return groups
+          
+          # Find all package files
+          print("Discovering package files...")
+          ecosystem_directories = defaultdict(list)
+          
+          for ecosystem, patterns in ecosystems.items():
+              files = find_files(patterns)
+              if files:
+                  directories = get_directories(files, ecosystem)
+                  ecosystem_directories[ecosystem] = directories
+                  print(f"  {ecosystem}: Found {len(files)} files in {len(directories)} directories")
+                  for directory in directories:
+                      print(f"    - {directory}")
+          
+          if not ecosystem_directories:
+              print("\nNo package files found in repository!")
+              sys.exit(0)
+          
+          # Generate dependabot configuration
+          print("\nGenerating dependabot.yml...")
+          
+          config = {
+              'version': 2,
+              'updates': []
+          }
+          
+          # Parse grouping strategy once
+          groups = parse_grouping_strategy(grouping_strategy)
+          if groups:
+              print(f"  Applying grouping strategy: {grouping_strategy}")
+              print(f"  Groups: {list(groups.keys())}")
+          else:
+              print(f"  No grouping applied (strategy: none)")
+          
+          # Generate updates for each ecosystem and directory
+          for ecosystem in sorted(ecosystem_directories.keys()):
+              directories = ecosystem_directories[ecosystem]
+              day = ecosystem_days.get(ecosystem, 'saturday')
+              
+              for directory in directories:
+                  update = {
+                      'package-ecosystem': ecosystem,
+                      'directory': directory,
+                      'schedule': {
+                          'interval': 'weekly',
+                          'day': day
+                      },
+                      'open-pull-requests-limit': pr_limit
+                  }
+                  
+                  # Add groups if applicable
+                  if groups:
+                      # Create ecosystem-specific group names
+                      update['groups'] = {}
+                      for group_name, group_config in groups.items():
+                          ecosystem_group_name = f"{ecosystem}-{group_name}"
+                          update['groups'][ecosystem_group_name] = group_config.copy()
+                  
+                  config['updates'].append(update)
+          
+          # Generate YAML with header
+          header_lines = [
+              "# Copyright 2024 The Drasi Authors.",
+              "#",
+              "# Licensed under the Apache License, Version 2.0 (the \"License\");",
+              "# you may not use this file except in compliance with the License.",
+              "# You may obtain a copy of the License at",
+              "#",
+              "#     http://www.apache.org/licenses/LICENSE-2.0",
+              "#",
+              "# Unless required by applicable law or agreed to in writing, software",
+              "# distributed under the License is distributed on an \"AS IS\" BASIS,",
+              "# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.",
+              "# See the License for the specific language governing permissions and",
+              "# limitations under the License.",
+              "",
+              "# This file is auto-generated by .github/workflows/update-dependabot-config.yml",
+              f"# Generated on: {datetime.utcnow().isoformat()}Z",
+              "# Configuration:",
+              f"#   - Grouping: {grouping_strategy}",
+              f"#   - PR Limit: {pr_limit}",
+              ""
+          ]
+          
+          yaml_content = '\n'.join(header_lines) + '\n'
+          
+          # Custom YAML dumper for better formatting
+          class CustomDumper(yaml.SafeDumper):
+              def increase_indent(self, flow=False, indentless=False):
+                  return super(CustomDumper, self).increase_indent(flow, False)
+          
+          # Append YAML content
+          yaml_content += yaml.dump(config, Dumper=CustomDumper, 
+                                   default_flow_style=False, 
+                                   sort_keys=False,
+                                   width=120)
+          
+          # Write the configuration
+          os.makedirs('.github', exist_ok=True)
+          with open('.github/dependabot.yml', 'w') as f:
+              f.write(yaml_content)
+          
+          print(f"\nSuccessfully generated .github/dependabot.yml")
+          print(f"Total updates configured: {len(config['updates'])}")
+          
+          # Check if file changed
+          result = subprocess.run(['git', 'diff', '--exit-code', '.github/dependabot.yml'], 
+                                capture_output=True)
+          changed = result.returncode != 0
+          
+          # Set output
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"changed={'true' if changed else 'false'}\n")
+              f.write(f"total_updates={len(config['updates'])}\n")
+              f.write(f"ecosystems={','.join(sorted(ecosystem_directories.keys()))}\n")
+          
+          if changed:
+              print("\nChanges detected in dependabot.yml")
+          else:
+              print("\nNo changes to dependabot.yml")
+          EOF
+
+      - name: Auto-commit changes
+        if: steps.generate-config.outputs.changed == 'true' && env.AUTO_COMMIT == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update dependabot configuration [skip ci]"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_author: "github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+          file_pattern: ".github/dependabot.yml"
+          
+      - name: Create Pull Request
+        if: steps.generate-config.outputs.changed == 'true' && env.AUTO_COMMIT != 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update dependabot configuration"
+          title: "chore: update dependabot configuration"
+          body: |
+            ## Automated Dependabot Configuration Update
+            
+            This PR updates the Dependabot configuration based on the package files found in the repository.
+            
+            ### Configuration:
+            - **Grouping Strategy**: ${{ env.GROUPING_STRATEGY }}
+            - **PR Limit**: ${{ env.PR_LIMIT }}
+            - **Total Updates**: ${{ steps.generate-config.outputs.total_updates }}
+            - **Ecosystems**: ${{ steps.generate-config.outputs.ecosystems }}
+            
+            ### Changes:
+            - Updated `.github/dependabot.yml` to include all discovered package ecosystems and directories
+            
+            ---
+            *This PR was automatically generated by the Update Dependabot Config workflow.*
+          branch: "chore/update-dependabot-config"
+          delete-branch: true
+          labels: |
+            dependencies
+            automated
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## Dependabot Config Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Changed**: ${{ steps.generate-config.outputs.changed || 'false' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Grouping**: ${{ env.GROUPING_STRATEGY }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **PR Limit**: ${{ env.PR_LIMIT }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Auto-commit**: ${{ env.AUTO_COMMIT }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Updates**: ${{ steps.generate-config.outputs.total_updates || '0' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Ecosystems**: ${{ steps.generate-config.outputs.ecosystems || 'none' }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Send Discord notification on failure
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_GITHUB_WORKFLOWS_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "Discord webhook URL not configured"
+            exit 0
+          fi
+          
+          python3 << 'EOF'
+          import os
+          import json
+          import urllib.request
+          from datetime import datetime
+          
+          webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
+          if not webhook_url:
+              print("Discord webhook URL not configured")
+              exit(0)
+          
+          # Construct Discord message
+          message = {
+              "content": "❌ **Dependabot Config Update Failed**",
+              "embeds": [{
+                  "title": "Workflow Failure",
+                  "color": 15158332,  # Red color
+                  "fields": [
+                      {
+                          "name": "Repository",
+                          "value": f"`{os.environ['GITHUB_REPOSITORY']}`",
+                          "inline": True
+                      },
+                      {
+                          "name": "Workflow",
+                          "value": "Update Dependabot Config",
+                          "inline": True
+                      },
+                      {
+                          "name": "Branch",
+                          "value": f"`{os.environ['GITHUB_REF_NAME']}`",
+                          "inline": True
+                      },
+                      {
+                          "name": "Run ID",
+                          "value": os.environ['GITHUB_RUN_ID'],
+                          "inline": True
+                      },
+                      {
+                          "name": "Run Number",
+                          "value": os.environ['GITHUB_RUN_NUMBER'],
+                          "inline": True
+                      },
+                      {
+                          "name": "Actor",
+                          "value": os.environ['GITHUB_ACTOR'],
+                          "inline": True
+                      },
+                      {
+                          "name": "View Run",
+                          "value": f"[Click here]({os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']})",
+                          "inline": False
+                      }
+                  ],
+                  "timestamp": datetime.utcnow().isoformat() + "Z",
+                  "footer": {
+                      "text": f"GitHub Actions • {os.environ['GITHUB_REPOSITORY']}"
+                  }
+              }]
+          }
+          
+          # Send to Discord
+          req = urllib.request.Request(
+              webhook_url,
+              data=json.dumps(message).encode('utf-8'),
+              headers={'Content-Type': 'application/json'}
+          )
+          
+          try:
+              with urllib.request.urlopen(req) as response:
+                  print(f"Discord notification sent: {response.status}")
+          except Exception as e:
+              print(f"Failed to send Discord notification: {e}")
+              # Don't fail the workflow if Discord notification fails
+          EOF
