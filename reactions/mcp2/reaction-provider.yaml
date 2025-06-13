@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ReactionProvider
+name: McpServer
+spec:
+  services:
+    reaction:
+      image: reaction-mcp-server
+      dapr:
+        app-port: "80"
+      endpoints:
+        dapr-http:
+          port: 80
+          protocol: "HTTP"
+        mcp-server:
+          port: 8080
+          protocol: "HTTP"
+  config_schema:
+    type: object
+    properties:
+      keyField:
+        type: string
+        description: Field to use as unique identifier for resources
+        default: "id"
+      resourceContentType:
+        type: string
+        description: MIME type for resource content
+        default: "application/json"
+        enum: 
+          - "application/json"
+          - "text/plain" 
+          - "application/xml"
+          - "text/html"
+          - "text/csv"
+      description:
+        type: string
+        description: Description of the query exposed via MCP
+    required: 
+      - keyField

@@ -1,0 +1,24 @@
+kind: Reaction
+apiVersion: v1
+name: mcp-server
+spec:
+  kind: McpServer
+  queries:
+    active-customers: |
+      {
+        "keyField": "customerId",
+        "resourceContentType": "application/json",
+        "description": "Active customer records from the CRM system"
+      }
+    inventory-levels: |
+      {
+        "keyField": "sku",
+        "resourceContentType": "application/json",
+        "description": "Real-time inventory levels across all warehouses"
+      }
+    order-status: |
+      {
+        "keyField": "orderId",
+        "resourceContentType": "application/json",
+        "description": "Current status of all orders in the system"
+      }
