@@ -86,7 +86,7 @@ module.exports = async function () {
 
   console.log("Loading Docker images into Kind cluster...");
   await Promise.all([
-    tryLoadInfraImages(clusterName),
+    // tryLoadInfraImages(clusterName),
     loadDrasiImages(clusterName)
   ]);
 
