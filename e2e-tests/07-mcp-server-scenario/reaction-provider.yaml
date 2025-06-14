@@ -13,7 +13,7 @@ spec:
           target: $mcpServerPort
           setting: internal
       dapr:
-        app-port: "80"
+        app-port: "8080"
         app-protocol: http
       config_schema:
         type: object

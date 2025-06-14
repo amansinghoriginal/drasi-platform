@@ -1,0 +1,28 @@
+DEBUG LINES ADDED TO mcp-server.test.js
+=======================================
+
+Line numbers and debug additions:
+
+1. After line 233 (in 'should list available queries as MCP resources using HTTP' test):
+   - Add: console.log('DEBUG: Raw resources response:', JSON.stringify(resources, null, 2));
+
+2. After line 238 (same test):
+   - Add: console.log('DEBUG: Total resources found:', resources.resources.length);
+   - Add: console.log('DEBUG: Resource URIs:', resources.resources.map(r => r.uri));
+
+3. After line 255 (same test):
+   - Add: console.log('DEBUG: Query resources found:', queryResources.length);
+   - Add: console.log('DEBUG: Query resource details:', queryResources);
+
+4. In mcpRequest function (after line 81):
+   - Add: console.log('DEBUG: MCP Request:', method, params);
+   - Add: console.log('DEBUG: MCP Response:', JSON.stringify(jsonData, null, 2));
+
+5. After line 316 (in create entry test):
+   - Add: console.log('DEBUG: Inserted customer with ID:', customerId);
+
+6. After line 331 (in create entry test):
+   - Add: console.log('DEBUG: Looking for resource URI:', entryUri);
+
+TO REMOVE THESE LATER:
+- Search for all lines containing "DEBUG:" and remove them

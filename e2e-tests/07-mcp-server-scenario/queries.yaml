@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ContinuousQuery
+name: customer-data
+spec:
+  mode: query
+  sources:
+    subscriptions:
+      - id: mcp-test-pg-source
+        nodes:
+          - sourceLabel: customers
+  query: >
+    MATCH
+      (c:customers)
+    RETURN
+      c.customer_id AS customer_id,
+      c.name AS name,
+      c.email AS email,
+      c.created_at AS created_at,
+      c.updated_at AS updated_at
+---
+apiVersion: v1
+kind: ContinuousQuery
+name: order-data
+spec:
+  mode: query
+  sources:
+    subscriptions:
+      - id: mcp-test-pg-source
+        nodes:
+          - sourceLabel: orders
+  query: >
+    MATCH
+      (o:orders)
+    RETURN
+      o.order_id AS order_id,
+      o.customer_id AS customer_id,
+      o.total AS total,
+      o.status AS status,
+      o.created_at AS created_at,
+      o.updated_at AS updated_at

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Source  
+name: mcp-test-pg-source
+spec:
+  kind: PostgreSQL
+  properties:
+    host: mcp-test-db.default.svc.cluster.local
+    port: 5432
+    database: testdb
+    user: testuser
+    password: testpassword
+    ssl: false
+    tables:
+      - public.customers
+      - public.orders
