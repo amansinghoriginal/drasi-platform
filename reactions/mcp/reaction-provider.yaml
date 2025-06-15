@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ReactionProvider
+name: McpServer
+spec:
+  services:
+    reaction:
+      image: reaction-mcp-server
+      endpoints:
+        dapr-http:
+          target: $daprHttpPort
+          setting: internal
+        mcp-server:
+          target: $mcpServerPort
+          setting: internal
+      dapr:
+        app-port: "80"
+        app-protocol: http
+      config_schema:
+        type: object
+        properties:
+          daprHttpPort:
+            type: string
+            default: "80"
+          mcpServerPort:
+            type: string
+            default: "8080"
