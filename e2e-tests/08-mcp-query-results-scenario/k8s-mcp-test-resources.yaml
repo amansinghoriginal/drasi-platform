@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-test-db-init
+  namespace: default
+data:
+  init.sql: |
+    CREATE ROLE replication_group;
+    CREATE ROLE replication_user REPLICATION LOGIN;
+    GRANT replication_group TO testuser;
+    GRANT replication_group TO replication_user;
+
+    CREATE TABLE products (
+        product_id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255),
+        description TEXT,
+        price DECIMAL(10, 2),
+        last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    ALTER TABLE products OWNER TO replication_group;
+
+    INSERT INTO products (product_id, name, description, price) VALUES
+    ('P001', 'Laptop Pro', 'High-end laptop for professionals', 1200.00),
+    ('P002', 'Wireless Mouse', 'Ergonomic wireless mouse', 25.00);
+    
+    -- Create a publication for the products table
+    CREATE PUBLICATION products_publication FOR TABLE products;
+    
+    -- Create a replication slot
+    SELECT pg_create_logical_replication_slot('products_slot', 'pgoutput');
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mcp-test-db-credentials
+  namespace: default
+type: Opaque
+stringData:
+  POSTGRES_USER: testuser
+  POSTGRES_PASSWORD: testpassword
+  POSTGRES_DB: mcp_test_db
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mcp-test-db
+  namespace: default
+spec:
+  serviceName: mcp-test-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-test-db
+  template:
+    metadata:
+      labels:
+        app: mcp-test-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        args:
+        - -c
+        - wal_level=logical
+        - -c
+        - max_replication_slots=5
+        - -c
+        - max_wal_senders=10
+        ports:
+        - containerPort: 5432
+        envFrom:
+        - secretRef:
+            name: mcp-test-db-credentials
+        env:
+        - name: POSTGRES_DB
+          value: mcp_test_db
+        volumeMounts:
+        - name: mcp-test-db-init-script
+          mountPath: /docker-entrypoint-initdb.d
+        - name: mcp-test-db-data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+          requests:
+            cpu: "0.5"
+            memory: "512Mi"
+      volumes:
+      - name: mcp-test-db-init-script
+        configMap:
+          name: mcp-test-db-init
+      - name: mcp-test-db-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-test-db
+  namespace: default
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: mcp-test-db

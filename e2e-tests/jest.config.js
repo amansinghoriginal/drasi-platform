@@ -19,6 +19,27 @@ const config = {
   globalSetup: '<rootDir>/fixtures/cluster-setup.js',
   testTimeout: 10000,
   verbose: true,
+  preset: 'ts-jest/presets/default-esm',
+  extensionsToTreatAsEsm: ['.ts'],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
+  transform: {
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        useESM: true,
+        tsconfig: {
+          module: 'esnext',
+          target: 'es2022',
+        },
+      },
+    ],
+  },
+  testMatch: [
+    '**/*.test.ts',
+    '**/*.test.js'
+  ],
 };
 
 module.exports = config;

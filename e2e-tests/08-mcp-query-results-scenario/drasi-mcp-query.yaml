@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ContinuousQuery
+name: mcp-product-updates
+spec:
+  mode: query
+  sources:
+    subscriptions:
+      - id: mcp-pg-source
+        nodes:
+          - sourceLabel: products
+            timestampField: last_updated
+  query: |
+    MATCH
+      (p:products)
+    RETURN
+      p.product_id AS id,
+      p.name AS product_name,
+      p.description AS desc,
+      p.price AS current_price

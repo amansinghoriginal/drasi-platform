@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Reaction
+name: mcp-server-example
+spec:
+  kind: McpQueryResultsServer
+  queries:
+    customer-data: |
+      {
+        "keyField": "customer_id",
+        "resourceContentType": "application/json",
+        "description": "Customer data from PostgreSQL"
+      }
+    order-data: |
+      {
+        "keyField": "order_id",
+        "resourceContentType": "application/json",
+        "description": "Order data from PostgreSQL"
+      }

@@ -41,6 +41,7 @@ const images = [
   "drasi-project/reaction-gremlin",
   "drasi-project/reaction-sync-dapr-statestore",
   "drasi-project/reaction-post-dapr-pubsub",
+  "drasi-project/reaction-mcp-query-results-server",
 ];
 
 async function loadDrasiImages(clusterName) {

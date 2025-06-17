@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Reaction
+name: mcp-server-e2e-test
+spec:
+  kind: McpQueryResultsServer
+  queries:
+    mcp-product-updates: >
+      {
+        "keyField": "id",
+        "resourceContentType": "application/json",
+        "description": "Live product information for MCP E2E tests"
+      }
