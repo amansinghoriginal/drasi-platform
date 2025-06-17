@@ -57,7 +57,9 @@ public class QueryResultStore : IQueryResultStore
         var entries = _queryResults.GetOrAdd(changeEvent.QueryId, _ => new ConcurrentDictionary<string, JsonElement>());
         
         // Process additions
-        foreach (var added in changeEvent.AddedResults)
+        if (changeEvent.AddedResults != null)
+        {
+            foreach (var added in changeEvent.AddedResults)
         {
             if (added.TryGetValue(config.KeyField, out var keyObj))
             {
@@ -69,11 +71,14 @@ public class QueryResultStore : IQueryResultStore
                     entries[key] = JsonSerializer.Deserialize<JsonElement>(json);
                     _logger.LogDebug("Added entry {Key} to query {QueryId}", key, changeEvent.QueryId);
                 }
+                }
             }
         }
         
         // Process updates
-        foreach (var updated in changeEvent.UpdatedResults)
+        if (changeEvent.UpdatedResults != null)
+        {
+            foreach (var updated in changeEvent.UpdatedResults)
         {
             if (updated.After.TryGetValue(config.KeyField, out var keyObj))
             {
@@ -85,11 +90,14 @@ public class QueryResultStore : IQueryResultStore
                     entries[key] = JsonSerializer.Deserialize<JsonElement>(json);
                     _logger.LogDebug("Updated entry {Key} in query {QueryId}", key, changeEvent.QueryId);
                 }
+                }
             }
         }
         
         // Process deletions
-        foreach (var deleted in changeEvent.DeletedResults)
+        if (changeEvent.DeletedResults != null)
+        {
+            foreach (var deleted in changeEvent.DeletedResults)
         {
             if (deleted.TryGetValue(config.KeyField, out var keyObj))
             {
@@ -99,15 +107,16 @@ public class QueryResultStore : IQueryResultStore
                     entries.TryRemove(key, out _);
                     _logger.LogDebug("Deleted entry {Key} from query {QueryId}", key, changeEvent.QueryId);
                 }
+                }
             }
         }
         
         _logger.LogInformation(
             "Applied changes to query {QueryId}: +{Added} ~{Updated} -{Deleted}, total entries: {Total}",
             changeEvent.QueryId,
-            changeEvent.AddedResults.Count(),
-            changeEvent.UpdatedResults.Count(),
-            changeEvent.DeletedResults.Count(),
+            changeEvent.AddedResults?.Length ?? 0,
+            changeEvent.UpdatedResults?.Length ?? 0,
+            changeEvent.DeletedResults?.Length ?? 0,
             entries.Count);
         
         return Task.CompletedTask;

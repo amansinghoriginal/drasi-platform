@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Drasi.Reactions.McpQueryResultsServer", "Drasi.Reactions.McpQueryResultsServer\Drasi.Reactions.McpQueryResultsServer.csproj", "{8B7D9B5E-1A5B-4E7E-B8C5-3F5E9A7C8D2F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Drasi.Reactions.McpQueryResultsServer.Tests", "Drasi.Reactions.McpQueryResultsServer.Tests\Drasi.Reactions.McpQueryResultsServer.Tests.csproj", "{A7C9D4F2-3B8E-4A9C-9D5F-2E8A6B7D9C4F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,6 +16,10 @@ Global
 		{8B7D9B5E-1A5B-4E7E-B8C5-3F5E9A7C8D2F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8B7D9B5E-1A5B-4E7E-B8C5-3F5E9A7C8D2F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8B7D9B5E-1A5B-4E7E-B8C5-3F5E9A7C8D2F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7C9D4F2-3B8E-4A9C-9D5F-2E8A6B7D9C4F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7C9D4F2-3B8E-4A9C-9D5F-2E8A6B7D9C4F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7C9D4F2-3B8E-4A9C-9D5F-2E8A6B7D9C4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7C9D4F2-3B8E-4A9C-9D5F-2E8A6B7D9C4F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
