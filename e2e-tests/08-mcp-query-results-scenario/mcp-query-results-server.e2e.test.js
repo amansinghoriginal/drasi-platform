@@ -218,25 +218,37 @@ describe('McpQueryResultsServer E2E Tests', () => {
     };
 
 
-    test('MCP server should list the configured query resource', async () => {
-        // First check resource templates since our resources are templated
+    test('MCP server should list the configured query as a static resource', async () => {
+        // Check static resources - queries should now be listed here
+        const resourcesResult = await mcpSdkClient.listResources();
+        expect(resourcesResult.resources).toBeDefined();
+        expect(resourcesResult.resources.length).toBeGreaterThan(0);
+        
+        // Check for our specific query as a static resource
+        const queryResource = resourcesResult.resources.find(r => 
+            r.uri === `drasi://queries/${QUERY_NAME}`
+        );
+        expect(queryResource).toBeDefined();
+        expect(queryResource.name).toBe(QUERY_NAME);
+        expect(queryResource.description).toBe("Live product information for MCP E2E tests");
+        expect(queryResource.mimeType).toBe("application/json");
+        
+        // Check resource templates - only entry template should be listed
         const templatesResult = await mcpSdkClient.listResourceTemplates();
         expect(templatesResult.resourceTemplates).toBeDefined();
-        expect(templatesResult.resourceTemplates.length).toBeGreaterThan(0);
         
-        // Check for query template
+        // Should NOT have query template anymore
         const queryTemplate = templatesResult.resourceTemplates.find(t => 
             t.uriTemplate === "drasi://queries/{queryId}"
         );
-        expect(queryTemplate).toBeDefined();
-        expect(queryTemplate.name).toBe("Drasi Query");
+        expect(queryTemplate).toBeUndefined();
         
-        // Check for entry template
+        // Should still have entry template
         const entryTemplate = templatesResult.resourceTemplates.find(t =>
             t.uriTemplate === "drasi://entries/{queryId}/{entryKey}"
         );
         expect(entryTemplate).toBeDefined();
-        expect(entryTemplate.name).toBe("Drasi Entry");
+        expect(entryTemplate.name).toBe("Dataset Entry");
     });
 
     test('MCP server should return initial product entries', async () => {
@@ -250,8 +262,8 @@ describe('McpQueryResultsServer E2E Tests', () => {
                 ($2, 'Test Mouse', 'Test mouse description', 29.99, CURRENT_TIMESTAMP)
         `, [testProductId1, testProductId2]);
         
-        // Wait for data to propagate
-        await new Promise(r => setTimeout(r, 2000));
+        // Wait for data to propagate through Drasi
+        await new Promise(r => setTimeout(r, 5000));
         
         const queryResourceUri = `drasi://queries/${QUERY_NAME}`;
 
@@ -453,40 +465,122 @@ describe('McpQueryResultsServer E2E Tests', () => {
         await mcpSdkClient.unsubscribeResource({ uri: queryResourceUri });
     });
 
-    test('MCP server should only expose resource capabilities', async () => {
+    test('MCP server static resources can be discovered without prior knowledge', async () => {
+        // Test that clients can discover all available queries without knowing query IDs
+        const resourcesResult = await mcpSdkClient.listResources();
+        
+        // Find all query resources
+        const queryResources = resourcesResult.resources.filter(r => 
+            r.uri.startsWith('drasi://queries/')
+        );
+        
+        // We should have at least our test query
+        expect(queryResources.length).toBeGreaterThanOrEqual(1);
+        
+        // Each query resource should have proper metadata
+        queryResources.forEach(resource => {
+            expect(resource.name).toBeTruthy(); // Name is just the query ID now
+            expect(resource.mimeType).toBe('application/json');
+            // Description can be optional, but if present should be a string
+            if (resource.description) {
+                expect(typeof resource.description).toBe('string');
+            }
+        });
+    });
+
+    test('MCP server should expose resources and tools capabilities', async () => {
         // Get server capabilities from initialization
         const serverInfo = mcpSdkClient._serverCapabilities;
         
-        // Verify we only expose resources capability
+        // Verify we expose resources and tools capabilities
         expect(serverInfo).toBeDefined();
         expect(serverInfo.resources).toBeDefined();
-        expect(serverInfo.tools).toBeUndefined();
-        expect(serverInfo.prompts).toBeUndefined();
+        expect(serverInfo.tools).toBeDefined();
+        expect(serverInfo.prompts).toBeDefined(); // Server returns empty object {} for prompts
         expect(serverInfo.sampling).toBeUndefined();
         
-        // Try to call non-existent tool method - should fail
-        try {
-            await mcpSdkClient.request({
-                method: 'tools/list',
-                params: {}
-            });
-            fail('Expected method not found error');
-        } catch (error) {
-            expect(error.code).toBe(-32601); // Method not found
-            expect(error.message).toContain("Method 'tools/list' is not available");
-        }
+        // List tools - should now return our query tool
+        const toolsResult = await mcpSdkClient.listTools();
+        expect(toolsResult.tools).toBeDefined();
+        expect(toolsResult.tools.length).toBeGreaterThan(0);
         
-        // Try to call non-existent prompts method - should fail
-        try {
-            await mcpSdkClient.request({
-                method: 'prompts/list',
-                params: {}
-            });
-            fail('Expected method not found error');
-        } catch (error) {
-            expect(error.code).toBe(-32601); // Method not found
-            expect(error.message).toContain("Method 'prompts/list' is not available");
-        }
+        // Check for our specific query tool
+        const queryTool = toolsResult.tools.find(t => 
+            t.name === `get_${QUERY_NAME}_results`
+        );
+        expect(queryTool).toBeDefined();
+        expect(queryTool.description).toBe("Live product information for MCP E2E tests");
+        expect(queryTool.inputSchema).toBeDefined();
+        expect(queryTool.inputSchema.type).toBe("object");
+        
+        // List prompts - should return empty list
+        const promptsResult = await mcpSdkClient.listPrompts();
+        expect(promptsResult.prompts).toBeDefined();
+        expect(promptsResult.prompts.length).toBe(0);
+    });
+
+    test('MCP tools should fetch live query results with filtering', async () => {
+        // ARRANGE
+        const testProductId1 = 'TEST_001';
+        const testProductId2 = 'TEST_002';
+        const testProductId3 = 'TEST_003';
+        
+        // Insert test products with different prices
+        await pgClient.query(`
+            INSERT INTO products (product_id, name, description, price, last_updated) 
+            VALUES 
+                ($1, 'Budget Laptop', 'Affordable laptop', 599.99, CURRENT_TIMESTAMP),
+                ($2, 'Premium Laptop', 'High-end laptop', 1999.99, CURRENT_TIMESTAMP),
+                ($3, 'Mid-range Laptop', 'Standard laptop', 999.99, CURRENT_TIMESTAMP)
+        `, [testProductId1, testProductId2, testProductId3]);
+        
+        // Wait for data to propagate through Drasi
+        await new Promise(r => setTimeout(r, 5000));
+        
+        const toolName = `get_${QUERY_NAME}_results`;
+        
+        // ACT & ASSERT
+        
+        // Test 1: Call tool without parameters (get all results)
+        const allResults = await mcpSdkClient.callTool({
+            name: toolName,
+            arguments: {}
+        });
+        
+        expect(allResults.content).toBeDefined();
+        expect(allResults.content.length).toBeGreaterThan(0);
+        const allData = JSON.parse(allResults.content[0].text);
+        expect(allData.queryId).toBe(QUERY_NAME);
+        expect(allData.description).toBe("Live product information for MCP E2E tests");
+        expect(allData.resultCount).toBe(3);
+        expect(allData.results.length).toBe(3);
+        
+        // Test 2: Call tool with limit parameter
+        const limitedResults = await mcpSdkClient.callTool({
+            name: toolName,
+            arguments: { limit: 2 }
+        });
+        
+        const limitedData = JSON.parse(limitedResults.content[0].text);
+        expect(limitedData.resultCount).toBe(2);
+        expect(limitedData.totalCount).toBe(3);
+        expect(limitedData.results.length).toBe(2);
+        
+        // Test 3: Call tool with filter parameter
+        // Note: This tests the filter logic but may need adjustment based on actual data structure
+        const filteredResults = await mcpSdkClient.callTool({
+            name: toolName,
+            arguments: { 
+                filter: { 
+                    product_name: 'Premium Laptop' 
+                } 
+            }
+        });
+        
+        const filteredData = JSON.parse(filteredResults.content[0].text);
+        expect(filteredData.results.length).toBe(1);
+        expect(filteredData.results[0].product_name).toBe('Premium Laptop');
+        expect(filteredData.results[0].id).toBe(testProductId2);
     });
 
     test('MCP server should handle subscription persistence across rapid changes', async () => {

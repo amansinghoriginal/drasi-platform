@@ -56,7 +56,7 @@ public class DrasiResourcesTests
         _mockResultStore.Setup(x => x.GetQueryEntriesAsync(queryId)).ReturnsAsync(entryKeys);
 
         // Act
-        var result = await _resources.GetQueryEntries(queryId, CancellationToken.None);
+        var result = await _resources.GetQueryResource(queryId, CancellationToken.None);
 
         // Assert
         Assert.Equal($"drasi://queries/{queryId}", result.Uri);
@@ -83,7 +83,7 @@ public class DrasiResourcesTests
 
         // Act & Assert
         var exception = await Assert.ThrowsAsync<McpException>(() => 
-            _resources.GetQueryEntries(queryId, CancellationToken.None));
+            _resources.GetQueryResource(queryId, CancellationToken.None));
         
         // Verify exception message instead of code
         Assert.Contains("Query not found", exception.Message);
@@ -100,7 +100,7 @@ public class DrasiResourcesTests
         _mockResultStore.Setup(x => x.GetQueryEntriesAsync(queryId)).ReturnsAsync(Array.Empty<string>());
 
         // Act
-        var result = await _resources.GetQueryEntries(queryId, CancellationToken.None);
+        var result = await _resources.GetQueryResource(queryId, CancellationToken.None);
 
         // Assert
         var responseData = JsonSerializer.Deserialize<Dictionary<string, object>>(result.Text);
@@ -123,7 +123,7 @@ public class DrasiResourcesTests
 
         // Act & Assert
         var mcpException = await Assert.ThrowsAsync<McpException>(() => 
-            _resources.GetQueryEntries(queryId, CancellationToken.None));
+            _resources.GetQueryResource(queryId, CancellationToken.None));
         
         // Verify exception message instead of code
         Assert.Equal("Internal error", mcpException.Message);
@@ -262,7 +262,7 @@ public class DrasiResourcesTests
         _mockResultStore.Setup(x => x.GetQueryEntriesAsync(queryId)).ReturnsAsync(entryKeys);
 
         // Act
-        await _resources.GetQueryEntries(queryId, CancellationToken.None);
+        await _resources.GetQueryResource(queryId, CancellationToken.None);
 
         // Assert
         _mockLogger.Verify(

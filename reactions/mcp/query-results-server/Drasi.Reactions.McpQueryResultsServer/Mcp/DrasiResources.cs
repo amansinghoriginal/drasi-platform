@@ -40,9 +40,9 @@ public class DrasiResources
         _logger = logger;
     }
     
-    [McpServerResource(UriTemplate = "drasi://queries/{queryId}", Name = "Drasi Query")]
-    [Description("Get all entries for a Drasi continuous query")]
-    public async Task<TextResourceContents> GetQueryEntries(
+    // Method to read a query resource - called from custom read handler
+    // No UriTemplate attribute to prevent it being listed as a template
+    public async Task<TextResourceContents> GetQueryResource(
         string queryId,
         CancellationToken cancellationToken)
     {
