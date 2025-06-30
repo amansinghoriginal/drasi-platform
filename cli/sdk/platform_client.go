@@ -14,6 +14,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
+	"drasi.io/cli/utils"
 	"drasi.io/cli/sdk/registry"
 	"github.com/phayes/freeport"
 	corev1 "k8s.io/api/core/v1"
@@ -61,7 +62,13 @@ type KubernetesPlatformClient struct {
 
 func MakeKubernetesPlatformClient(configuration *registry.KubernetesConfig) (*KubernetesPlatformClient, error) {
 
-	config, err := clientcmd.NewClientConfigFromBytes(configuration.KubeConfig)
+	// Fix problematic server URLs in kubeconfig for Windows compatibility
+	fixedKubeConfig, err := utils.FixKubeconfigServerURL(configuration.KubeConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	config, err := clientcmd.NewClientConfigFromBytes(fixedKubeConfig)
 	if err != nil {
 		return nil, err
 	}

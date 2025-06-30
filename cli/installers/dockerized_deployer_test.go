@@ -1,10 +1,9 @@
 package installers
 
 import (
-	"net/url"
-	"strings"
 	"testing"
 
+	"drasi.io/cli/utils"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
@@ -50,29 +49,41 @@ func TestServerURLReplacement(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a test cluster config
-			cluster := &api.Cluster{
-				Server: tt.originalServer,
+			// Create a kubeconfig with the test server URL
+			config := &api.Config{
+				Clusters: map[string]*api.Cluster{
+					"test-cluster": {
+						Server: tt.originalServer,
+					},
+				},
+				Contexts: map[string]*api.Context{
+					"test-context": {
+						Cluster: "test-cluster",
+					},
+				},
+				CurrentContext: "test-context",
 			}
 
-			// Apply the URL replacement logic from mergeDockerKubeConfig
-			serverURL, err := url.Parse(cluster.Server)
+			// Convert to bytes
+			kubeconfig, err := clientcmd.Write(*config)
 			if err != nil {
-				t.Fatalf("Failed to parse server URL: %v", err)
+				t.Fatalf("Failed to write kubeconfig: %v", err)
 			}
 
-			// Extract port and update to use localhost for Windows Docker Desktop compatibility
-			hostParts := strings.Split(serverURL.Host, ":")
-			if len(hostParts) == 2 {
-				port := hostParts[1]
-				hostname := hostParts[0]
-				if hostname == "host.docker.internal" || hostname == "0.0.0.0" {
-					serverURL.Host = "localhost:" + port
-					cluster.Server = serverURL.String()
-				}
+			// Use the shared function to fix the kubeconfig
+			fixedKubeconfig, err := utils.FixKubeconfigServerURL(kubeconfig)
+			if err != nil {
+				t.Fatalf("FixKubeconfigServerURL failed: %v", err)
 			}
 
-			// Check the result
+			// Parse the fixed kubeconfig
+			dockerConfig, err := clientcmd.Load(fixedKubeconfig)
+			if err != nil {
+				t.Fatalf("Failed to load fixed kubeconfig: %v", err)
+			}
+
+			// Verify the result
+			cluster := dockerConfig.Clusters["test-cluster"]
 			if cluster.Server != tt.expectedServer {
 				t.Errorf("Expected server URL %q, got %q", tt.expectedServer, cluster.Server)
 			}
@@ -120,29 +131,16 @@ func TestMergeDockerKubeConfigWithHostDockerInternal(t *testing.T) {
 		t.Fatalf("Failed to write kubeconfig: %v", err)
 	}
 
-	// Parse it back to simulate the function flow
-	dockerConfig, err := clientcmd.Load(kubeconfig)
+	// Use the shared function to fix the kubeconfig
+	fixedKubeconfig, err := utils.FixKubeconfigServerURL(kubeconfig)
 	if err != nil {
-		t.Fatalf("Failed to load kubeconfig: %v", err)
+		t.Fatalf("FixKubeconfigServerURL failed: %v", err)
 	}
 
-	// Apply the server URL replacement logic
-	for k, cluster := range dockerConfig.Clusters {
-		serverURL, err := url.Parse(cluster.Server)
-		if err != nil {
-			t.Fatalf("Failed to parse server URL: %v", err)
-		}
-
-		hostParts := strings.Split(serverURL.Host, ":")
-		if len(hostParts) == 2 {
-			port := hostParts[1]
-			hostname := hostParts[0]
-			if hostname == "host.docker.internal" || hostname == "0.0.0.0" {
-				serverURL.Host = "localhost:" + port
-				cluster.Server = serverURL.String()
-				dockerConfig.Clusters[k] = cluster
-			}
-		}
+	// Parse the fixed kubeconfig
+	dockerConfig, err := clientcmd.Load(fixedKubeconfig)
+	if err != nil {
+		t.Fatalf("Failed to load fixed kubeconfig: %v", err)
 	}
 
 	// Verify the server URL was replaced

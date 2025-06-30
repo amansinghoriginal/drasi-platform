@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,6 +16,7 @@ import (
 
 	"drasi.io/cli/output"
 	"drasi.io/cli/sdk/registry"
+	"drasi.io/cli/utils"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
@@ -404,12 +404,6 @@ func (t *DockerizedDeployer) readKubeconfig(containerId string) ([]byte, error) 
 }
 
 func (t *DockerizedDeployer) mergeDockerKubeConfig(name string, kubeconfig []byte) error {
-	// Parse the provided kubeconfig
-	dockerConfig, err := clientcmd.Load(kubeconfig)
-	if err != nil {
-		return fmt.Errorf("error loading provided kubeconfig: %w", err)
-	}
-
 	// Get the kubeconfig file path
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -423,25 +417,15 @@ func (t *DockerizedDeployer) mergeDockerKubeConfig(name string, kubeconfig []byt
 	}
 
 	// Modify server URL to use localhost for Windows compatibility
-	for k, cluster := range dockerConfig.Clusters {
-		serverURL, err := url.Parse(cluster.Server)
-		if err != nil {
-			return fmt.Errorf("error parsing server URL: %w", err)
-		}
+	fixedKubeconfig, err := utils.FixKubeconfigServerURL(kubeconfig)
+	if err != nil {
+		return fmt.Errorf("error fixing kubeconfig server URL: %w", err)
+	}
 
-		// Extract port and update to use localhost for Windows Docker Desktop compatibility
-		// This handles cases where k3d uses host.docker.internal or 0.0.0.0 which may not resolve on Windows
-		hostParts := strings.Split(serverURL.Host, ":")
-		if len(hostParts) == 2 {
-			port := hostParts[1]
-			// Replace problematic hostnames with localhost
-			hostname := hostParts[0]
-			if hostname == "host.docker.internal" || hostname == "0.0.0.0" {
-				serverURL.Host = "localhost:" + port
-				cluster.Server = serverURL.String()
-				dockerConfig.Clusters[k] = cluster
-			}
-		}
+	// Parse the fixed kubeconfig
+	dockerConfig, err := clientcmd.Load(fixedKubeconfig)
+	if err != nil {
+		return fmt.Errorf("error loading provided kubeconfig: %w", err)
 	}
 
 	// Create unique name for the context, cluster, and user
